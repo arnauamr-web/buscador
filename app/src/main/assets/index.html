@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buscador de imágenes</title>
+<style>
+:root{--bg:#0f1115;--card:#1a1d24;--line:#2a2e38;--txt:#eef0f4;--mut:#9aa1af;--acc:#4f8cff;--ok:#3ecf8e;--err:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.45 system-ui,sans-serif;padding:16px 16px 48px}
+h1{font-size:22px;margin:4px 0 14px}
+h2{font-size:17px;margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+button,.btn{display:inline-block;background:var(--acc);color:#fff;border:0;border-radius:12px;padding:14px 18px;font-size:16px;font-weight:600;text-decoration:none;text-align:center}
+button.big{width:100%}
+button.sec,.btn.sec{background:#2a2e38}
+button:disabled{opacity:.5}
+input[type=text],input[type=password]{width:100%;background:#12141a;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:16px;margin:4px 0 10px}
+label{font-size:14px;color:var(--mut)}
+details summary{font-weight:600;cursor:pointer}
+details p,details li{color:var(--mut);font-size:14px}
+a{color:var(--acc)}
+#preview{max-width:100%;max-height:260px;border-radius:12px;display:none;margin:12px auto 0}
+#status{margin:10px 0 0;font-size:15px;color:var(--mut)}
+#status.err{color:var(--err)}
+#status.ok{color:var(--ok)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.item{display:block;background:#12141a;border:1px solid var(--line);border-radius:12px;overflow:hidden;text-decoration:none;color:var(--txt)}
+.item img{width:100%;height:110px;object-fit:cover;display:block;background:#0b0c10}
+.item .t{font-size:13px;padding:6px 8px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.item .s{font-size:12px;color:var(--mut);padding:2px 8px 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.tag{background:#12141a;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--mut)}
+.note{font-size:13px;color:var(--mut)}
+.warn{color:#ffcf6b}
+</style>
+</head>
+<body>
+<h1>🔎 Buscador de imágenes</h1>
+
+<div class="card">
+  <input type="file" id="file" accept="image/*" hidden>
+  <button class="big" id="pick">Elegir una imagen</button>
+  <img id="preview" alt="Imagen elegida">
+
+  <div style="margin-top:14px">
+    <label for="who">¿Quién es o qué es? (opcional)</label>
+    <input type="text" id="who" placeholder="Ej: nombre de la persona, lugar, evento…">
+    <label for="ctx">Algo más que sepas (opcional)</label>
+    <input type="text" id="ctx" placeholder="Ej: entrevista, año aproximado, canal…">
+  </div>
+  <button class="big" id="go" disabled>Buscar</button>
+  <div id="status"></div>
+</div>
+
+<div id="out"></div>
+
+<details class="card" id="cfg">
+  <summary>⚙️ Ajustes (solo la primera vez)</summary>
+  <p>La app necesita dos claves gratuitas. Se guardan solo en tu móvil.</p>
+  <label for="k1">Clave de ImgBB (sube la imagen unos minutos)</label>
+  <input type="password" id="k1" autocomplete="off">
+  <p>1) Entra en <a href="https://api.imgbb.com/">api.imgbb.com</a> · 2) Crea cuenta · 3) Pulsa "Get API key".</p>
+  <label for="k2">Clave de SerpAPI (hace la búsqueda)</label>
+  <input type="password" id="k2" autocomplete="off">
+  <p>1) Entra en <a href="https://serpapi.com/">serpapi.com</a> · 2) Crea cuenta gratis (100 búsquedas al mes) · 3) Copia tu "API key".</p>
+  <button class="sec" id="saveKeys">Guardar claves</button>
+</details>
+
+<p class="note">Privacidad: la imagen se sube a ImgBB con borrado automático a los 10 minutos y se envía a SerpAPI para buscar. La app no reconoce caras: solo busca dónde aparece la imagen en internet.</p>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function load(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } }
+function save(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+
+let chosen = null;
+
+// ---- puente con la app (Android) ----
+const pending = {};
+let counter = 0;
+window.__cb = (id, res) => { const f = pending[id]; if (f) { delete pending[id]; f(res); } };
+function native(method, ...args){
+  return new Promise((resolve, reject) => {
+    if (!window.Android) { reject(new Error('Esto solo funciona dentro de la app instalada.')); return; }
+    const id = 'c' + (++counter);
+    pending[id] = resolve;
+    try { window.Android[method](id, ...args); } catch(e){ delete pending[id]; reject(e); }
+  });
+}
+async function callApi(method, ...args){
+  const r = await native(method, ...args);
+  if (r.error) throw new Error('Sin conexión o fallo de red (' + r.error + ')');
+  let body = {};
+  try { body = JSON.parse(r.body); } catch(e){}
+  return { status: r.status, body };
+}
+
+// ---- interfaz ----
+function setStatus(msg, cls){ const s = $('status'); s.textContent = msg; s.className = cls || ''; }
+
+$('k1').value = load('k_imgbb');
+$('k2').value = load('k_serp');
+if (!$('k1').value || !$('k2').value) $('cfg').open = true;
+
+$('saveKeys').onclick = () => {
+  save('k_imgbb', $('k1').value.trim());
+  save('k_serp', $('k2').value.trim());
+  $('cfg').open = false;
+  setStatus('Claves guardadas.', 'ok');
+};
+
+$('pick').onclick = () => $('file').click();
+$('file').onchange = () => {
+  const f = $('file').files[0];
+  if (!f) return;
+  chosen = f;
+  const p = $('preview');
+  p.src = URL.createObjectURL(f);
+  p.style.display = 'block';
+  $('go').disabled = false;
+  $('out').innerHTML = '';
+  setStatus('');
+};
+
+function shrink(file){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const u = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 1280;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const k = Math.min(1, MAX / Math.max(w, h));
+      w = Math.round(w * k); h = Math.round(h * k);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(u);
+      resolve(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); reject(new Error('No se pudo leer la imagen.')); };
+    img.src = u;
+  });
+}
+
+$('go').onclick = async () => {
+  const imgbb = load('k_imgbb'), serp = load('k_serp');
+  if (!imgbb || !serp) { $('cfg').open = true; setStatus('Primero guarda las dos claves en Ajustes.', 'err'); return; }
+  if (!chosen) return;
+  $('go').disabled = true;
+  $('out').innerHTML = '';
+  try {
+    setStatus('Preparando la imagen…');
+    const b64 = await shrink(chosen);
+
+    setStatus('Subiendo la imagen (se borra sola en 10 minutos)…');
+    const up = await callApi('uploadImage', imgbb, b64);
+    const url = up.body && up.body.data && up.body.data.url;
+    if (!url) {
+      const m = up.body && up.body.error && up.body.error.message;
+      throw new Error('No se pudo subir la imagen. Revisa tu clave de ImgBB.' + (m ? ' (' + m + ')' : ''));
+    }
+
+    setStatus('Buscando en internet…');
+    const who = $('who').value.trim(), ctx = $('ctx').value.trim();
+    const extra = [who, ctx].filter(Boolean).join(' ');
+    const r = await callApi('lensSearch', serp, url, extra);
+    if (r.body && r.body.error) throw new Error('SerpAPI: ' + r.body.error);
+    if (r.status >= 400) throw new Error('La búsqueda falló (código ' + r.status + '). Revisa tu clave de SerpAPI.');
+
+    setStatus('Listo.', 'ok');
+    render(r.body || {}, who, ctx);
+  } catch (e) {
+    setStatus(e.message || String(e), 'err');
+  } finally {
+    $('go').disabled = false;
+  }
+};
+
+// ---- resultados ----
+function host(u){ try { return new URL(u).hostname.replace(/^www\./, ''); } catch(e){ return ''; } }
+function isYT(u){ const h = host(u); return h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtu.be'; }
+function ytSearchLink(q){ return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q); }
+
+function item(x){
+  const th = x.thumbnail || x.image || '';
+  return '<a class="item" href="' + esc(x.link) + '">' +
+    (th ? '<img loading="lazy" src="' + esc(th) + '" alt="">' : '') +
+    '<div class="t">' + esc(x.title || x.link) + '</div>' +
+    '<div class="s">' + esc(x.source || host(x.link)) + (x.date ? ' · ' + esc(x.date) : '') + '</div></a>';
+}
+
+function render(d, who, ctx){
+  const m = (d.visual_matches || []).filter(x => x && x.link);
+  const out = [];
+
+  if (!m.length) {
+    out.push('<div class="card"><h2>Sin resultados</h2><p>No he encontrado coincidencias para esta imagen. Prueba con otra versión (más grande o sin recortar).</p>' +
+      (who ? '<a class="btn sec" href="' + esc(ytSearchLink(who + ' ' + ctx)) + '">Buscar "' + esc(who) + '" en YouTube</a>' : '') + '</div>');
+    $('out').innerHTML = out.join('');
+    return;
+  }
+
+  // resumen
+  const counts = {};
+  m.forEach(x => { const h = host(x.link); if (h) counts[h] = (counts[h] || 0) + 1; });
+  const tops = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const dates = m.map(x => x.date).filter(Boolean)
+    .map(raw => ({ raw, t: Date.parse(raw) })).filter(x => !isNaN(x.t)).sort((a, b) => a.t - b.t);
+  const kg = [].concat(d.knowledge_graph || []).filter(Boolean).slice(0, 3);
+
+  let s = '<div class="card"><h2>Resumen</h2>';
+  if (who) s += '<p>Según tú: <b>' + esc(who) + '</b>' + (ctx ? ' · ' + esc(ctx) : '') + '</p>';
+  s += '<p>Coincidencias encontradas: <b>' + m.length + '</b></p>';
+  s += '<p>Fecha más antigua que indican las fuentes: <b>' +
+    (dates.length ? esc(dates[0].raw) : 'ninguna fuente da fecha') + '</b></p>';
+  if (kg.length) {
+    s += '<p>Lo que sugiere el buscador: ' + kg.map(k => '<b>' + esc(k.title || '') + '</b>' + (k.subtitle ? ' (' + esc(k.subtitle) + ')' : '')).join(', ') +
+      '. <span class="warn">Es una pista basada en las páginas web, no una identificación segura.</span></p>';
+  }
+  s += '<div class="row">' + tops.map(t => '<span class="tag">' + esc(t[0]) + ' · ' + t[1] + '</span>').join('') + '</div></div>';
+  out.push(s);
+
+  // vídeos
+  const yt = m.filter(x => isYT(x.link));
+  if (yt.length) {
+    out.push('<div class="card"><h2>🎬 Posibles vídeos de origen</h2><div class="grid">' + yt.slice(0, 8).map(item).join('') + '</div></div>');
+  } else {
+    const q = (who ? who + ' ' : '') + (ctx || (m[0] && m[0].title) || '');
+    out.push('<div class="card"><h2>🎬 Vídeo</h2><p class="warn">No he encontrado el vídeo exacto de esta imagen.</p>' +
+      '<a class="btn sec" href="' + esc(ytSearchLink(q.trim())) + '">Buscar en YouTube: ' + esc(q.trim().slice(0, 40)) + '</a></div>');
+  }
+
+  // relacionadas
+  const rest = m.filter(x => !isYT(x.link)).slice(0, 24);
+  if (rest.length) {
+    out.push('<div class="card"><h2>🖼️ Imágenes y páginas relacionadas</h2><div class="grid">' + rest.map(item).join('') + '</div></div>');
+  }
+
+  $('out').innerHTML = out.join('');
+}
+</script>
+</body>
+</html>
