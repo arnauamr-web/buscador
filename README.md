@@ -1,19 +1,18 @@
 # Buscador de imágenes
 
-App Android que busca de dónde viene una imagen: páginas, vídeos de YouTube, fechas e imágenes relacionadas.
-No reconoce caras. Si le escribes quién es, usa ese dato para afinar la búsqueda.
+App Android que busca de dónde viene una imagen: la misma imagen, imágenes parecidas, vídeos de origen y, si quieres, una explicación del contexto.
+No reconoce caras. Si le escribes qué es, usa ese dato para afinar la búsqueda y ordenar los resultados.
 
-## Conseguir la APK (sin instalar nada en tu ordenador)
+La búsqueda sigue en segundo plano: puedes salir de la app y te avisa una notificación al terminar.
 
-1. Crea una cuenta en github.com y un repositorio nuevo (por ejemplo `buscador-imagenes`).
-2. Sube todo el contenido de esta carpeta al repositorio, **incluida la carpeta oculta `.github`**.
-   - Si no te deja subir `.github`: en GitHub pulsa **Add file → Create new file**, escribe el nombre
-     `.github/workflows/build.yml` y pega el contenido del archivo.
-3. Entra en la pestaña **Actions**. La compilación empieza sola (si no, pulsa **Run workflow**). Tarda unos 3-5 minutos.
-4. Cuando salga el check verde, abre esa ejecución y descarga **buscador-imagenes-apk** (es un zip con `app-debug.apk`).
-5. Pasa la APK al móvil, ábrela y acepta "instalar apps de fuentes desconocidas".
+## Instalar o actualizar
 
-## Claves gratuitas (solo la primera vez, dentro de la app → Ajustes)
+1. Cada vez que se sube un cambio, GitHub compila la app solo (pestaña **Actions**, unos 2 minutos).
+2. Abre la página **Releases** del repositorio, entra en **Buscador de imágenes (última versión)** y toca el archivo `Buscador-de-imagenes.apk`.
+3. Ábrelo en el móvil y acepta "instalar apps de fuentes desconocidas".
+4. A partir de esta versión la app se actualiza encima de la anterior, sin desinstalar nada.
 
-- **ImgBB**: https://api.imgbb.com/ → "Get API key". Sirve para subir la imagen unos minutos.
-- **SerpAPI**: https://serpapi.com/ → plan gratis con 100 búsquedas al mes.
+## Claves gratis (solo la primera vez, dentro de la app → Ajustes)
+
+- **ImgBB**: https://api.imgbb.com/ → "Get API key". Sube la imagen unos minutos.
+- **SerpAPI**: https://serpapi.com/manage-api-key. Hace la búsqueda (plan gratis).

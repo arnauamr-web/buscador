@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,10 +24,29 @@ jobs:
           gradle-version: 8.9
 
       - name: Compilar
-        run: gradle assembleDebug --no-daemon
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon 2>&1 | tee build.log
+
+      - name: Resumen de errores
+        if: failure()
+        run: |
+          msg=$(grep -E "error:|e: |What went wrong|Execution failed|symbol:|location:|warning: \[" -A2 build.log | head -50 | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error::${msg}"
 
       - name: Guardar la APK
         uses: actions/upload-artifact@v4
         with:
           name: buscador-imagenes-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publicar la APK para descargarla desde el móvil
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk Buscador-de-imagenes.apk
+          gh release delete apk-actual --cleanup-tag --yes || true
+          gh release create apk-actual Buscador-de-imagenes.apk \
+            --title "Buscador de imágenes (última versión)" \
+            --notes "Descarga el archivo Buscador-de-imagenes.apk y ábrelo en el móvil para instalar o actualizar la app." \
+            --target "${{ github.sha }}"

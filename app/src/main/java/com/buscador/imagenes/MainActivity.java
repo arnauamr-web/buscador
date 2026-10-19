@@ -1,8 +1,14 @@
 package com.buscador.imagenes;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -15,15 +21,15 @@ import android.webkit.WebViewClient;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
 
 public class MainActivity extends Activity {
 
     private static final int PICK_IMAGE = 1;
+    private static final int REQ_NOTIF = 2;
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
@@ -31,6 +37,13 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Android 13 o superior: pedir permiso para poder avisar al terminar
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+        }
 
         web = new WebView(this);
         setContentView(web);
@@ -52,9 +65,9 @@ public class MainActivity extends Activity {
                         startActivity(new Intent(Intent.ACTION_VIEW, uri));
                     } catch (Exception ignored) {
                     }
-                    return true;
                 }
-                return false;
+                // Cualquier otra cosa no se abre nunca dentro de la app.
+                return !"file".equals(scheme);
             }
         });
 
@@ -85,6 +98,15 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Al volver a la app, comprobar enseguida si ya hay resultado.
+        if (web != null) {
+            web.evaluateJavascript("window.__poll && window.__poll()", null);
+        }
+    }
+
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == PICK_IMAGE) {
             if (fileCallback != null) {
@@ -100,84 +122,113 @@ public class MainActivity extends Activity {
         }
     }
 
-    // Funciones que la página puede llamar. Hacen las peticiones de red por ella.
+    private SharedPreferences prefs() {
+        return getSharedPreferences(SearchService.PREFS, MODE_PRIVATE);
+    }
+
+    // Funciones que la página puede llamar.
     private class Bridge {
 
         @JavascriptInterface
-        public void uploadImage(String id, String key, String base64) {
-            String url = "https://api.imgbb.com/1/upload?expiration=600&key=" + enc(key);
-            request(id, url, "POST", "image=" + enc(base64));
+        public String startSearch(String json) {
+            if (SearchService.alive) {
+                return "busy";
+            }
+            try {
+                FileOutputStream out = new FileOutputStream(new File(getFilesDir(), "job.json"));
+                out.write(json.getBytes("UTF-8"));
+                out.close();
+
+                SharedPreferences.Editor e = prefs().edit();
+                e.putString("state", "running");
+                e.putString("step", "Preparando la búsqueda…");
+                e.putString("error", "");
+                e.putLong("jobId", System.currentTimeMillis());
+                e.putBoolean("seen", false);
+                e.commit();
+
+                SearchService.cancelled = false;
+                SearchService.alive = true;
+                Intent i = new Intent(MainActivity.this, SearchService.class);
+                if (Build.VERSION.SDK_INT >= 26) {
+                    startForegroundService(i);
+                } else {
+                    startService(i);
+                }
+                return "ok";
+            } catch (Exception ex) {
+                SearchService.alive = false;
+                return "error:" + ex.getMessage();
+            }
         }
 
         @JavascriptInterface
-        public void lensSearch(String id, String key, String imageUrl, String extra) {
-            String url = "https://serpapi.com/search.json?engine=google_lens&hl=es"
-                    + "&url=" + enc(imageUrl) + "&api_key=" + enc(key);
-            if (extra != null && extra.trim().length() > 0) {
-                url += "&q=" + enc(extra.trim());
+        public String getState() {
+            SharedPreferences p = prefs();
+            String state = p.getString("state", "idle");
+            String error = p.getString("error", "");
+            // Si el sistema cerró la app a media búsqueda, no dejarla en "buscando" para siempre.
+            if ("running".equals(state) && !SearchService.alive) {
+                state = "error";
+                error = "La búsqueda se interrumpió. Inténtalo otra vez.";
+                SharedPreferences.Editor e = p.edit();
+                e.putString("state", state);
+                e.putString("error", error);
+                e.putBoolean("seen", false);
+                e.commit();
             }
-            request(id, url, "GET", null);
+            try {
+                JSONObject o = new JSONObject();
+                o.put("state", state);
+                o.put("step", p.getString("step", ""));
+                o.put("error", error);
+                o.put("jobId", p.getLong("jobId", 0));
+                o.put("seen", p.getBoolean("seen", true));
+                return o.toString();
+            } catch (Exception ex) {
+                return "{\"state\":\"idle\"}";
+            }
         }
-    }
 
-    private void request(final String id, final String urlText, final String method, final String body) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                String result;
-                try {
-                    HttpURLConnection conn = (HttpURLConnection) new URL(urlText).openConnection();
-                    conn.setConnectTimeout(20000);
-                    conn.setReadTimeout(90000);
-                    conn.setRequestMethod(method);
-                    if (body != null) {
-                        conn.setDoOutput(true);
-                        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-                        OutputStream out = conn.getOutputStream();
-                        out.write(body.getBytes("UTF-8"));
-                        out.close();
-                    }
-                    int code = conn.getResponseCode();
-                    InputStream in = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
-                    String text = in == null ? "" : readAll(in);
-                    JSONObject o = new JSONObject();
-                    o.put("status", code);
-                    o.put("body", text);
-                    result = o.toString();
-                } catch (Exception e) {
-                    try {
-                        result = new JSONObject().put("error", String.valueOf(e.getMessage())).toString();
-                    } catch (Exception x) {
-                        result = "{\"error\":\"fallo de red\"}";
-                    }
+        @JavascriptInterface
+        public String getResult() {
+            try {
+                File f = new File(getFilesDir(), "result.json");
+                if (!f.exists()) {
+                    return "";
                 }
-                final String js = "window.__cb(" + JSONObject.quote(id) + "," + result + ")";
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        web.evaluateJavascript(js, null);
-                    }
-                });
+                InputStream in = new FileInputStream(f);
+                ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                byte[] chunk = new byte[8192];
+                int n;
+                while ((n = in.read(chunk)) != -1) {
+                    buf.write(chunk, 0, n);
+                }
+                in.close();
+                return buf.toString("UTF-8");
+            } catch (Exception ex) {
+                return "";
             }
-        }).start();
-    }
-
-    private static String readAll(InputStream in) throws Exception {
-        ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        byte[] chunk = new byte[8192];
-        int n;
-        while ((n = in.read(chunk)) != -1) {
-            buf.write(chunk, 0, n);
         }
-        in.close();
-        return buf.toString("UTF-8");
-    }
 
-    private static String enc(String s) {
-        try {
-            return URLEncoder.encode(s, "UTF-8");
-        } catch (Exception e) {
-            return "";
+        @JavascriptInterface
+        public void markSeen() {
+            prefs().edit().putBoolean("seen", true).commit();
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            nm.cancel(SearchService.ID_DONE);
+        }
+
+        @JavascriptInterface
+        public void cancel() {
+            SearchService.cancel();
+            SharedPreferences.Editor e = prefs().edit();
+            e.putString("state", "idle");
+            e.putString("step", "");
+            e.putString("error", "");
+            e.putBoolean("seen", true);
+            e.commit();
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            nm.cancel(SearchService.ID_PROGRESS);
         }
     }
 }

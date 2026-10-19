@@ -3,243 +3,139 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Buscador de imágenes</title>
 <style>
-:root{--bg:#0f1115;--card:#1a1d24;--line:#2a2e38;--txt:#eef0f4;--mut:#9aa1af;--acc:#4f8cff;--ok:#3ecf8e;--err:#ff6b6b}
+:root{
+  --bg:#0e1116; --panel:#171b22; --panel2:#11151b; --line:#262c36;
+  --txt:#eef1f6; --mut:#9aa4b2; --acc:#5b9bff; --acc-ink:#06101f;
+  --ok:#43d19e; --err:#ff7a7a; --warn:#ffcf70;
+  color-scheme:dark;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.45 system-ui,sans-serif;padding:16px 16px 48px}
-h1{font-size:22px;margin:4px 0 14px}
-h2{font-size:17px;margin:0 0 8px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
-button,.btn{display:inline-block;background:var(--acc);color:#fff;border:0;border-radius:12px;padding:14px 18px;font-size:16px;font-weight:600;text-decoration:none;text-align:center}
-button.big{width:100%}
-button.sec,.btn.sec{background:#2a2e38}
-button:disabled{opacity:.5}
-input[type=text],input[type=password]{width:100%;background:#12141a;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:16px;margin:4px 0 10px}
-label{font-size:14px;color:var(--mut)}
-details summary{font-weight:600;cursor:pointer}
+html,body{margin:0;background:var(--bg);color:var(--txt)}
+body{font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px 16px 56px;max-width:640px;margin:0 auto}
+h1{font-size:22px;margin:6px 0 14px}
+h2{font-size:17px;margin:0 0 10px}
+h3{font-size:15px;margin:14px 0 6px}
+p{margin:0 0 10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.btn{display:inline-block;min-height:48px;background:var(--acc);color:var(--acc-ink);border:0;border-radius:10px;padding:12px 18px;font:inherit;font-weight:700;text-decoration:none;text-align:center}
+.btn.block{display:block;width:100%}
+.btn.sec{background:#2a313d;color:var(--txt)}
+.btn:disabled{opacity:.45}
+.btn:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+label.f{display:block;font-size:14px;color:var(--mut);margin:12px 0 4px}
+.opt{color:var(--mut);font-weight:400}
+input[type=text],input[type=password]{width:100%;min-height:48px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit}
+fieldset{border:0;padding:0;margin:16px 0 4px}
+legend{font-size:14px;color:var(--mut);padding:0;margin-bottom:6px}
+label.check{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel2)}
+label.check input{width:22px;height:22px;margin:2px 0 0;flex:none;accent-color:var(--acc)}
+label.check span{min-width:0}
+label.check b{display:block}
+label.check small{display:block;color:var(--mut);font-size:13px}
+#preview{display:block;max-width:100%;max-height:240px;border-radius:10px;margin:12px auto 0}
+.note{font-size:13px;color:var(--mut)}
+.msg{min-height:1.4em;margin:10px 0 0;font-size:15px;color:var(--mut)}
+.msg.err,.err{color:var(--err)}
+.msg.ok,.ok{color:var(--ok)}
+.warn{color:var(--warn)}
+details summary{font-weight:700;cursor:pointer;min-height:32px}
 details p,details li{color:var(--mut);font-size:14px}
 a{color:var(--acc)}
-#preview{max-width:100%;max-height:260px;border-radius:12px;display:none;margin:12px auto 0}
-#status{margin:10px 0 0;font-size:15px;color:var(--mut)}
-#status.err{color:var(--err)}
-#status.ok{color:var(--ok)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.item{display:block;background:#12141a;border:1px solid var(--line);border-radius:12px;overflow:hidden;text-decoration:none;color:var(--txt)}
-.item img{width:100%;height:110px;object-fit:cover;display:block;background:#0b0c10}
-.item .t{font-size:13px;padding:6px 8px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.item .s{font-size:12px;color:var(--mut);padding:2px 8px 8px}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.tag{background:#12141a;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--mut)}
-.note{font-size:13px;color:var(--mut)}
-.warn{color:#ffcf6b}
+.item{position:relative;display:block;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden;text-decoration:none;color:var(--txt)}
+.item img,.item .noimg{display:block;width:100%;height:112px;object-fit:cover;background:#0a0c10}
+.item .t{font-size:13px;padding:6px 8px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.item .s{font-size:12px;color:var(--mut);padding:2px 8px 8px;overflow-wrap:anywhere}
+.s{font-size:12px;color:var(--mut)}
+.plat{position:absolute;top:6px;left:6px;background:var(--acc);color:var(--acc-ink);font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px}
+.hit{display:block;margin:0 8px 8px;font-size:11px;color:var(--ok)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.tag{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--mut)}
+.refs{padding-left:18px;margin:0}
+.refs li{margin-bottom:10px;color:var(--txt);font-size:14px;overflow-wrap:anywhere}
+.refs li div{color:var(--mut);font-size:13px}
+.spin{width:44px;height:44px;border:4px solid var(--line);border-top-color:var(--acc);border-radius:50%;margin:8px auto 16px;animation:g 1s linear infinite}
+@keyframes g{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+.center{text-align:center}
 </style>
 </head>
 <body>
-<h1>🔎 Buscador de imágenes</h1>
 
-<div class="card">
-  <input type="file" id="file" accept="image/*" hidden>
-  <button class="big" id="pick">Elegir una imagen</button>
-  <img id="preview" alt="Imagen elegida">
+<main id="vForm">
+  <h1>Buscador de imágenes</h1>
 
-  <div style="margin-top:14px">
-    <label for="who">¿Quién es o qué es? (opcional)</label>
-    <input type="text" id="who" placeholder="Ej: nombre de la persona, lugar, evento…">
-    <label for="ctx">Algo más que sepas (opcional)</label>
-    <input type="text" id="ctx" placeholder="Ej: entrevista, año aproximado, canal…">
-  </div>
-  <button class="big" id="go" disabled>Buscar</button>
-  <div id="status"></div>
-</div>
+  <section class="card">
+    <input type="file" id="file" accept="image/*" hidden>
+    <button class="btn block" id="pick" type="button">Elegir imagen</button>
+    <img id="preview" alt="Imagen elegida" hidden>
+  </section>
 
-<div id="out"></div>
+  <section class="card">
+    <label class="f" for="what">¿Qué es? <span class="opt">(si lo sabes)</span></label>
+    <input type="text" id="what" autocomplete="off" placeholder="Ej: la playa de las Catedrales, un accidente de tren…">
 
-<details class="card" id="cfg">
-  <summary>⚙️ Ajustes (solo la primera vez)</summary>
-  <p>La app necesita dos claves gratuitas. Se guardan solo en tu móvil.</p>
-  <label for="k1">Clave de ImgBB (sube la imagen unos minutos)</label>
-  <input type="password" id="k1" autocomplete="off">
-  <p>1) Entra en <a href="https://api.imgbb.com/">api.imgbb.com</a> · 2) Crea cuenta · 3) Pulsa "Get API key".</p>
-  <label for="k2">Clave de SerpAPI (hace la búsqueda)</label>
-  <input type="password" id="k2" autocomplete="off">
-  <p>1) Entra en <a href="https://serpapi.com/">serpapi.com</a> · 2) Crea cuenta gratis (100 búsquedas al mes) · 3) Copia tu "API key".</p>
-  <button class="sec" id="saveKeys">Guardar claves</button>
-</details>
+    <label class="f" for="details">¿Qué buscas exactamente?</label>
+    <input type="text" id="details" autocomplete="off" placeholder="Ej: este mismo lugar, el vídeo de donde sale…">
 
-<p class="note">Privacidad: la imagen se sube a ImgBB con borrado automático a los 10 minutos y se envía a SerpAPI para buscar. La app no reconoce caras: solo busca dónde aparece la imagen en internet.</p>
+    <fieldset>
+      <legend>Quiero ver</legend>
+      <label class="check"><input type="checkbox" id="optExact" checked>
+        <span><b>La misma imagen</b><small>De dónde sale, cuándo se publicó y su vídeo original.</small></span></label>
+      <label class="check"><input type="checkbox" id="optSimilar">
+        <span><b>Imágenes parecidas</b><small>Otras fotos que se le parecen.</small></span></label>
+      <label class="check"><input type="checkbox" id="optExplain">
+        <span><b>Explicación del contexto</b><small>Opcional. Cuenta de qué trata, en vez de enseñar más imágenes.</small></span></label>
+    </fieldset>
+    <p class="note">Cada opción gasta 1 o 2 búsquedas de tu plan gratis. Puedes salir de la app mientras busca: te avisa una notificación al terminar.</p>
 
-<script>
-const $ = id => document.getElementById(id);
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function load(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } }
-function save(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+    <button class="btn block" id="go" type="button" disabled>Buscar</button>
+    <p id="msg" class="msg" aria-live="polite"></p>
+    <button class="btn sec block" id="last" type="button" hidden>Ver el último resultado</button>
+  </section>
 
-let chosen = null;
+  <details id="cfg" class="card">
+    <summary>Ajustes (solo la primera vez)</summary>
+    <p>La app necesita dos claves gratis. Se guardan solo en tu móvil.</p>
+    <label class="f" for="k1">Clave de ImgBB</label>
+    <input type="password" id="k1" autocomplete="off">
+    <p>Entra en <a href="https://api.imgbb.com/">api.imgbb.com</a>, crea una cuenta y pulsa «Get API key».</p>
+    <label class="f" for="k2">Clave de SerpAPI</label>
+    <input type="password" id="k2" autocomplete="off">
+    <p>Entra en <a href="https://serpapi.com/manage-api-key">serpapi.com/manage-api-key</a> y copia tu clave.</p>
+    <button class="btn sec block" id="saveKeys" type="button">Guardar claves</button>
+  </details>
 
-// ---- puente con la app (Android) ----
-const pending = {};
-let counter = 0;
-window.__cb = (id, res) => { const f = pending[id]; if (f) { delete pending[id]; f(res); } };
-function native(method, ...args){
-  return new Promise((resolve, reject) => {
-    if (!window.Android) { reject(new Error('Esto solo funciona dentro de la app instalada.')); return; }
-    const id = 'c' + (++counter);
-    pending[id] = resolve;
-    try { window.Android[method](id, ...args); } catch(e){ delete pending[id]; reject(e); }
-  });
-}
-async function callApi(method, ...args){
-  const r = await native(method, ...args);
-  if (r.error) throw new Error('Sin conexión o fallo de red (' + r.error + ')');
-  let body = {};
-  try { body = JSON.parse(r.body); } catch(e){}
-  return { status: r.status, body };
-}
+  <p class="note">Privacidad: la imagen se sube a ImgBB y se borra sola a los 10 minutos. Se envía a SerpAPI para buscar dónde aparece en internet. La app no reconoce caras.</p>
+</main>
 
-// ---- interfaz ----
-function setStatus(msg, cls){ const s = $('status'); s.textContent = msg; s.className = cls || ''; }
+<main id="vProgress" class="center" hidden>
+  <h1>Buscando…</h1>
+  <section class="card">
+    <div class="spin" role="status" aria-label="Buscando"></div>
+    <p id="step">Preparando la búsqueda…</p>
+    <p class="note">Puedes salir de la app y usar otra. Te avisaremos con una notificación cuando termine.</p>
+    <button class="btn sec block" id="cancel" type="button">Cancelar</button>
+  </section>
+</main>
 
-$('k1').value = load('k_imgbb');
-$('k2').value = load('k_serp');
-if (!$('k1').value || !$('k2').value) $('cfg').open = true;
+<main id="vResult" hidden>
+  <h1>Resultados</h1>
+  <div id="resultBody"></div>
+  <button class="btn block" id="again" type="button">Nueva búsqueda</button>
+</main>
 
-$('saveKeys').onclick = () => {
-  save('k_imgbb', $('k1').value.trim());
-  save('k_serp', $('k2').value.trim());
-  $('cfg').open = false;
-  setStatus('Claves guardadas.', 'ok');
-};
+<main id="vError" hidden>
+  <h1>No se pudo buscar</h1>
+  <section class="card">
+    <p class="err" id="errText"></p>
+    <button class="btn block" id="again2" type="button">Volver</button>
+  </section>
+</main>
 
-$('pick').onclick = () => $('file').click();
-$('file').onchange = () => {
-  const f = $('file').files[0];
-  if (!f) return;
-  chosen = f;
-  const p = $('preview');
-  p.src = URL.createObjectURL(f);
-  p.style.display = 'block';
-  $('go').disabled = false;
-  $('out').innerHTML = '';
-  setStatus('');
-};
-
-function shrink(file){
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const u = URL.createObjectURL(file);
-    img.onload = () => {
-      const MAX = 1280;
-      let w = img.naturalWidth, h = img.naturalHeight;
-      const k = Math.min(1, MAX / Math.max(w, h));
-      w = Math.round(w * k); h = Math.round(h * k);
-      const c = document.createElement('canvas');
-      c.width = w; c.height = h;
-      c.getContext('2d').drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(u);
-      resolve(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
-    };
-    img.onerror = () => { URL.revokeObjectURL(u); reject(new Error('No se pudo leer la imagen.')); };
-    img.src = u;
-  });
-}
-
-$('go').onclick = async () => {
-  const imgbb = load('k_imgbb'), serp = load('k_serp');
-  if (!imgbb || !serp) { $('cfg').open = true; setStatus('Primero guarda las dos claves en Ajustes.', 'err'); return; }
-  if (!chosen) return;
-  $('go').disabled = true;
-  $('out').innerHTML = '';
-  try {
-    setStatus('Preparando la imagen…');
-    const b64 = await shrink(chosen);
-
-    setStatus('Subiendo la imagen (se borra sola en 10 minutos)…');
-    const up = await callApi('uploadImage', imgbb, b64);
-    const url = up.body && up.body.data && up.body.data.url;
-    if (!url) {
-      const m = up.body && up.body.error && up.body.error.message;
-      throw new Error('No se pudo subir la imagen. Revisa tu clave de ImgBB.' + (m ? ' (' + m + ')' : ''));
-    }
-
-    setStatus('Buscando en internet…');
-    const who = $('who').value.trim(), ctx = $('ctx').value.trim();
-    const extra = [who, ctx].filter(Boolean).join(' ');
-    const r = await callApi('lensSearch', serp, url, extra);
-    if (r.body && r.body.error) throw new Error('SerpAPI: ' + r.body.error);
-    if (r.status >= 400) throw new Error('La búsqueda falló (código ' + r.status + '). Revisa tu clave de SerpAPI.');
-
-    setStatus('Listo.', 'ok');
-    render(r.body || {}, who, ctx);
-  } catch (e) {
-    setStatus(e.message || String(e), 'err');
-  } finally {
-    $('go').disabled = false;
-  }
-};
-
-// ---- resultados ----
-function host(u){ try { return new URL(u).hostname.replace(/^www\./, ''); } catch(e){ return ''; } }
-function isYT(u){ const h = host(u); return h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtu.be'; }
-function ytSearchLink(q){ return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q); }
-
-function item(x){
-  const th = x.thumbnail || x.image || '';
-  return '<a class="item" href="' + esc(x.link) + '">' +
-    (th ? '<img loading="lazy" src="' + esc(th) + '" alt="">' : '') +
-    '<div class="t">' + esc(x.title || x.link) + '</div>' +
-    '<div class="s">' + esc(x.source || host(x.link)) + (x.date ? ' · ' + esc(x.date) : '') + '</div></a>';
-}
-
-function render(d, who, ctx){
-  const m = (d.visual_matches || []).filter(x => x && x.link);
-  const out = [];
-
-  if (!m.length) {
-    out.push('<div class="card"><h2>Sin resultados</h2><p>No he encontrado coincidencias para esta imagen. Prueba con otra versión (más grande o sin recortar).</p>' +
-      (who ? '<a class="btn sec" href="' + esc(ytSearchLink(who + ' ' + ctx)) + '">Buscar "' + esc(who) + '" en YouTube</a>' : '') + '</div>');
-    $('out').innerHTML = out.join('');
-    return;
-  }
-
-  // resumen
-  const counts = {};
-  m.forEach(x => { const h = host(x.link); if (h) counts[h] = (counts[h] || 0) + 1; });
-  const tops = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  const dates = m.map(x => x.date).filter(Boolean)
-    .map(raw => ({ raw, t: Date.parse(raw) })).filter(x => !isNaN(x.t)).sort((a, b) => a.t - b.t);
-  const kg = [].concat(d.knowledge_graph || []).filter(Boolean).slice(0, 3);
-
-  let s = '<div class="card"><h2>Resumen</h2>';
-  if (who) s += '<p>Según tú: <b>' + esc(who) + '</b>' + (ctx ? ' · ' + esc(ctx) : '') + '</p>';
-  s += '<p>Coincidencias encontradas: <b>' + m.length + '</b></p>';
-  s += '<p>Fecha más antigua que indican las fuentes: <b>' +
-    (dates.length ? esc(dates[0].raw) : 'ninguna fuente da fecha') + '</b></p>';
-  if (kg.length) {
-    s += '<p>Lo que sugiere el buscador: ' + kg.map(k => '<b>' + esc(k.title || '') + '</b>' + (k.subtitle ? ' (' + esc(k.subtitle) + ')' : '')).join(', ') +
-      '. <span class="warn">Es una pista basada en las páginas web, no una identificación segura.</span></p>';
-  }
-  s += '<div class="row">' + tops.map(t => '<span class="tag">' + esc(t[0]) + ' · ' + t[1] + '</span>').join('') + '</div></div>';
-  out.push(s);
-
-  // vídeos
-  const yt = m.filter(x => isYT(x.link));
-  if (yt.length) {
-    out.push('<div class="card"><h2>🎬 Posibles vídeos de origen</h2><div class="grid">' + yt.slice(0, 8).map(item).join('') + '</div></div>');
-  } else {
-    const q = (who ? who + ' ' : '') + (ctx || (m[0] && m[0].title) || '');
-    out.push('<div class="card"><h2>🎬 Vídeo</h2><p class="warn">No he encontrado el vídeo exacto de esta imagen.</p>' +
-      '<a class="btn sec" href="' + esc(ytSearchLink(q.trim())) + '">Buscar en YouTube: ' + esc(q.trim().slice(0, 40)) + '</a></div>');
-  }
-
-  // relacionadas
-  const rest = m.filter(x => !isYT(x.link)).slice(0, 24);
-  if (rest.length) {
-    out.push('<div class="card"><h2>🖼️ Imágenes y páginas relacionadas</h2><div class="grid">' + rest.map(item).join('') + '</div></div>');
-  }
-
-  $('out').innerHTML = out.join('');
-}
-</script>
+<script src="app.js"></script>
 </body>
 </html>
