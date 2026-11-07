@@ -1,0 +1,53 @@
+name: Compilar APK de Mi Nube
+
+on:
+  push:
+    branches: [mi-nube]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Compilar
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon 2>&1 | tee build.log
+
+      - name: Resumen de errores
+        if: failure()
+        run: |
+          msg=$(grep -E "error:|e: |What went wrong|Execution failed|symbol:|location:|warning: \[" -A2 build.log | head -50 | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error::${msg}"
+
+      - name: Guardar la APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-nube-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publicar la APK y la versión para el ordenador
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk Mi-Nube.apk
+          cp app/src/main/assets/index.html Mi-Nube-ordenador.html
+          gh release delete mi-nube-actual --cleanup-tag --yes || true
+          gh release create mi-nube-actual Mi-Nube.apk Mi-Nube-ordenador.html \
+            --title "Mi Nube (última versión)" \
+            --notes "Mi-Nube.apk es la app para el móvil. Mi-Nube-ordenador.html se abre con el navegador del ordenador." \
+            --target "${{ github.sha }}"
