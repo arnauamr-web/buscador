@@ -135,6 +135,18 @@ h1 { font-family: var(--font-display); font-size: 28px; line-height: 1.1; margin
 .full { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; overflow: hidden;
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
 #auth { z-index: 100; overflow-y: auto; display: block; }
+#lock { z-index: 120; align-items: center; justify-content: center; gap: 18px; text-align: center; padding-inline: 24px; }
+#lock h1 { font-size: 30px; }
+#lock p { margin: 0; color: var(--ink-2); min-height: 1.3em; }
+#lock p.bad { color: var(--danger); }
+.pdots { display: flex; gap: 14px; justify-content: center; }
+.pdots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink-2); }
+.pdots i.on { background: var(--accent); border-color: var(--accent); }
+.pad { display: grid; grid-template-columns: repeat(3, 76px); gap: 12px; justify-content: center; }
+.pad button { height: 64px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 24px; font-family: var(--font-display); }
+.pad button:active { background: var(--surface-2); }
+.pad .ghost { border-color: transparent; background: none; font-size: 15px; color: var(--ink-2); }
+.linkbtn { background: none; border: 0; color: var(--accent); font-weight: 600; padding: 8px; }
 #vw { z-index: 40; background: #060914; }
 #sc { z-index: 30; background: radial-gradient(120% 60% at 50% 0%, #1a1440 0%, var(--bg) 60%); }
 .f-top { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
@@ -287,13 +299,20 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
   <div class="sc-body"><div class="sc-in" id="sc-in"></div></div>
 </div>
 
+<div class="full" id="lock" hidden role="dialog" aria-modal="true" aria-label="Candado">
+  <h1>Mi Nube</h1>
+  <p id="lock-msg">Escribe tu PIN</p>
+  <div class="pdots" id="lock-dots" aria-hidden="true"></div>
+  <div class="pad" id="lock-pad"></div>
+  <button type="button" class="linkbtn" id="lock-forgot">¿Olvidaste el PIN?</button>
+</div>
 <div class="sheetbg" id="sheet" hidden><div class="sheet" id="sheet-box" role="dialog" aria-modal="true"></div></div>
 
 <script>
 (function () {
   "use strict";
   var APP = !!window.Android;
-  var VERSION = "1.1";
+  var VERSION = "1.2";
   var BUCKET = "nube";
 
   var SQL = [
@@ -1154,6 +1173,7 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
       var m = el("div", "meter"); m.appendChild(el("span", null, "Espacio usado: " + fmtSize(used) + " de 1 GB (plan gratis)")); var pb = el("div", "pb"), i = el("i"); i.style.width = Math.min(100, used / tot * 100) + "%"; pb.appendChild(i); m.appendChild(pb); b.appendChild(m);
       b.appendChild(el("p", "small", "Cuenta: " + (cfg ? cfg.email : "")));
       var r1 = el("button", "btn", "Sincronizar ahora"); r1.type = "button"; r1.onclick = function () { closeSheet(); syncNow(true); }; b.appendChild(r1);
+      var rp = el("button", "btn", PIN ? "Candado de la app: activado" : "Candado de la app (PIN)"); rp.type = "button"; rp.onclick = openPinSheet; b.appendChild(rp);
       var r2 = el("button", "btn", "Copiar el código SQL de instalación"); r2.type = "button"; r2.onclick = function () { copyText(SQL); }; b.appendChild(r2);
       var r3 = el("button", "btn danger", "Cerrar sesión"); r3.type = "button";
       r3.onclick = function () { if (!r3.classList.contains("armed")) { r3.classList.add("armed"); r3.textContent = "Pulsa otra vez para salir"; return; } logout(); }; b.appendChild(r3);
@@ -1170,6 +1190,101 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
       var r = el("button", "btn primary", "Reintentar"); r.type = "button"; r.onclick = function () { closeSheet(); syncNow(true); }; row.appendChild(c); row.appendChild(r); b.appendChild(row);
     });
   }
+
+  /* ---------- Candado de la app (PIN) ---------- */
+  var PIN = load("nube.pin"), lockWait = null, lockTries = 0, lockUntil = 0, hiddenAt = 0, GRACE = 60000;
+  function pinHash(x) { return codeHash("pin:" + x); }
+  function isLocked() { return !$("#lock").hidden; }
+  function showLock() {
+    if (!PIN) return Promise.resolve();
+    if (lockWait) return lockWait;
+    if (S.sc) closeSecret(); if (V) closeViewer(); closeSheet();
+    var buf = "", msg = $("#lock-msg"), dots = $("#lock-dots"), pad = $("#lock-pad"); pad.textContent = ""; dots.textContent = "";
+    for (var i = 0; i < PIN.n; i++) dots.appendChild(el("i"));
+    function paint() { [].forEach.call(dots.children, function (d, k) { d.classList.toggle("on", k < buf.length); }); }
+    function say(t, bad) { msg.textContent = t; msg.className = bad ? "bad" : ""; }
+    lockWait = new Promise(function (resolve) {
+      function press(d) {
+        if (Date.now() < lockUntil) { say("Espera " + Math.ceil((lockUntil - Date.now()) / 1000) + " s", true); return; }
+        if (buf.length >= PIN.n) return; buf += d; paint();
+        if (buf.length === PIN.n) {
+          if (pinHash(buf) === PIN.h) { lockTries = 0; $("#lock").hidden = true; document.removeEventListener("keydown", onKey, true); lockWait = null; resolve(); }
+          else { lockTries++; buf = ""; paint(); if (lockTries >= 5) { lockTries = 0; lockUntil = Date.now() + 30000; say("Demasiados fallos. Espera 30 s.", true); } else say("PIN incorrecto", true); }
+        }
+      }
+      function back() { buf = buf.slice(0, -1); paint(); }
+      function onKey(e) { if (!isLocked()) return; if (/^[0-9]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); press(e.key); } else if (e.key === "Backspace") { e.preventDefault(); e.stopPropagation(); back(); } }
+      document.addEventListener("keydown", onKey, true);
+      ["1", "2", "3", "4", "5", "6", "7", "8", "9"].forEach(function (d) { var b = el("button", null, d); b.type = "button"; b.onclick = function () { press(d); }; pad.appendChild(b); });
+      pad.appendChild(el("span")); var z = el("button", null, "0"); z.type = "button"; z.onclick = function () { press("0"); }; pad.appendChild(z);
+      var bk = el("button", "ghost", "Borrar"); bk.type = "button"; bk.onclick = back; pad.appendChild(bk);
+    });
+    say("Escribe tu PIN"); $("#lock").hidden = false; return lockWait;
+  }
+  $("#lock-forgot").onclick = function () {
+    var b = $("#lock-forgot"); if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Se cerrará la sesión y se quitará el PIN. Pulsa otra vez."; return; }
+    delete b.dataset.armed; b.textContent = "¿Olvidaste el PIN?"; PIN = null; save("nube.pin", null); lockWait = null; $("#lock").hidden = true; logout();
+  };
+  function openPinSheet() {
+    openSheet(function (b) {
+      b.appendChild(el("h3", null, "Candado de la app"));
+      function field(lbl) { var l = el("label", "field", lbl), i = document.createElement("input"); i.type = "password"; i.inputMode = "numeric"; i.maxLength = 6; i.autocomplete = "off"; l.appendChild(i); b.appendChild(l); return i; }
+      var err = el("div", "err");
+      function done() { var x = el("button", "btn", "Cerrar"); x.type = "button"; x.onclick = closeSheet; b.appendChild(x); }
+      if (PIN) {
+        b.appendChild(el("p", "small", "El candado está activado. Se pide el PIN al abrir la app y tras 1 minuto fuera."));
+        var cur = field("PIN actual"), nw = field("PIN nuevo (4 a 6 números)"); b.appendChild(err);
+        var ch = el("button", "btn primary", "Cambiar PIN"); ch.type = "button";
+        ch.onclick = function () {
+          if (pinHash(cur.value) !== PIN.h) { err.textContent = "El PIN actual no es correcto."; return; }
+          if (!/^[0-9]{4,6}$/.test(nw.value)) { err.textContent = "El PIN nuevo debe tener de 4 a 6 números."; return; }
+          PIN = { h: pinHash(nw.value), n: nw.value.length }; save("nube.pin", PIN); closeSheet(); toast("PIN cambiado");
+        }; b.appendChild(ch);
+        var rm = el("button", "btn danger", "Quitar el candado"); rm.type = "button";
+        rm.onclick = function () { if (pinHash(cur.value) !== PIN.h) { err.textContent = "Escribe tu PIN actual arriba."; return; } PIN = null; save("nube.pin", null); closeSheet(); toast("Candado quitado"); }; b.appendChild(rm);
+      } else {
+        b.appendChild(el("p", "small", "Pon un PIN para que nadie más pueda abrir Mi Nube en este aparato."));
+        var a1 = field("PIN (4 a 6 números)"), a2 = field("Repite el PIN"); b.appendChild(err);
+        var on = el("button", "btn primary", "Activar candado"); on.type = "button";
+        on.onclick = function () {
+          if (!/^[0-9]{4,6}$/.test(a1.value)) { err.textContent = "El PIN debe tener de 4 a 6 números."; return; }
+          if (a1.value !== a2.value) { err.textContent = "Los dos PIN no son iguales."; return; }
+          PIN = { h: pinHash(a1.value), n: a1.value.length }; save("nube.pin", PIN); closeSheet(); toast("Candado activado");
+        }; b.appendChild(on);
+      }
+      done();
+    });
+  }
+
+  /* ---------- Archivos compartidos desde otras apps (solo Android) ---------- */
+  var SHARED_BASE = "https://nube.local/_shared/", sharing = false;
+  async function checkShared() {
+    if (!APP || !authed || sharing || !Android.takeShared || isLocked()) return;
+    var list; try { list = JSON.parse(Android.takeShared() || "[]"); } catch (e) { list = []; }
+    if (!list.length) return;
+    sharing = true;
+    try {
+      var files = [];
+      for (var i = 0; i < list.length; i++) {
+        try { var r = await fetch(SHARED_BASE + list[i].id); if (!r.ok) throw new Error("x"); var bl = await r.blob(); files.push(new File([bl], list[i].name, { type: list[i].type || bl.type || "" })); } catch (e) {}
+      }
+      try { Android.sharedClear(); } catch (e) {}
+      if (!files.length) { toast("No se pudo leer lo compartido."); return; }
+      openSheet(function (b) {
+        b.appendChild(el("h3", null, "Guardar " + files.length + (files.length === 1 ? " archivo" : " archivos") + " en…"));
+        var l = el("div", "plist");
+        function item(label, id, color, depth) {
+          var bt = el("button"); bt.type = "button"; var d = el("span", "dot"); d.style.setProperty("--c", color || "#97a2c8"); bt.appendChild(d); bt.appendChild(document.createTextNode(new Array(depth + 1).join("    ") + label));
+          bt.onclick = function () { closeSheet(); uploadFiles(files, { folder_id: id }); }; l.appendChild(bt);
+        }
+        item("Sin carpeta (Inicio)", null, "#97a2c8", 0);
+        (function walk(pid, depth) { kids(pid).forEach(function (f) { item(f.name, f.id, f.color, depth); walk(f.id, depth + 1); }); })(null, 0);
+        b.appendChild(l);
+        var x = el("button", "btn", "Cancelar"); x.type = "button"; x.onclick = closeSheet; b.appendChild(x);
+      });
+    } finally { sharing = false; }
+  }
+  window.__shared = function () { checkShared(); };
 
   /* ---------- Entrar, salir y sincronizar ---------- */
   function normUrl(u) { u = String(u || "").trim().replace(/\/+$/, "").replace(/\/(rest|auth|storage)\/v1.*$/, ""); if (u && !/^https?:\/\//i.test(u)) u = "https://" + u; return u; }
@@ -1195,7 +1310,7 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
     } catch (x) { er.textContent = x.message; }
     go.disabled = false;
   };
-  function logout() { save("nube.sess", null); sess = null; authed = false; D = { folders: [], vaults: [], files: [] }; lastSig = null; urlc = {}; closeSheet(); if (V) closeViewer(); if (S.sc) closeSecret(); S = { tab: "files", path: [], tag: null, q: "", sel: null, edit: false, sc: null }; $("#q").value = ""; showAuth("Sesión cerrada."); }
+  function logout() { PIN = null; save("nube.pin", null); save("nube.sess", null); sess = null; authed = false; D = { folders: [], vaults: [], files: [] }; lastSig = null; urlc = {}; closeSheet(); if (V) closeViewer(); if (S.sc) closeSecret(); S = { tab: "files", path: [], tag: null, q: "", sel: null, edit: false, sc: null }; $("#q").value = ""; showAuth("Sesión cerrada."); }
 
   async function firstRun() {
     var flag = "nube.init." + (cfg ? cfg.email : "");
@@ -1224,10 +1339,11 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
     $("#auth").hidden = true; $("#app").hidden = false; $("#navbar").hidden = false; $("#fab").hidden = false; authed = true;
     try { await loadAll(); await firstRun(); loadError = ""; }
     catch (e) { handleLoadError(e); }
-    renderAll(); if (!loadError) purgeTrash(); startPoll();
+    renderAll(); if (!loadError) purgeTrash(); startPoll(); checkShared();
   }
 
   window.__back = function () {
+    if (isLocked()) return false;
     if (!$("#sheet").hidden) { closeSheet(); return true; }
     if (V) { closeViewer(); return true; }
     if (S.sc) { closeSecret(); return true; }
@@ -1240,18 +1356,26 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
     if (S.tab !== "files") { S.tab = "files"; renderAll(); return true; }
     return false;
   };
-  window.__lock = function () { if (S.sc) closeSecret(); };
+  window.__lock = function () { if (S.sc) closeSecret(); if (!hiddenAt) hiddenAt = Date.now(); };
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") { window.__back(); }
     else if (V && e.key === "ArrowRight" && V.ids.length > 1) stepV(1); else if (V && e.key === "ArrowLeft" && V.ids.length > 1) stepV(-1);
   });
+  function onShow() {
+    var away = hiddenAt ? Date.now() - hiddenAt : 0; hiddenAt = 0;
+    if (PIN && authed && away > GRACE) showLock().then(checkShared);
+    if (authed && !UP.busy) loadAll().then(function (ch) { if (ch) renderAll(); }).catch(function () {});
+    checkShared();
+  }
+  window.__resume = onShow;
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) { if (S.sc) closeSecret(); }
-    else if (authed && !UP.busy) loadAll().then(function (ch) { if (ch) renderAll(); }).catch(function () {});
+    if (document.hidden) { if (S.sc) closeSecret(); if (!hiddenAt) hiddenAt = Date.now(); return; }
+    onShow();
   });
 
   $(".search").insertBefore(ico("search"), $("#q"));
   (async function start() {
+    if (PIN && cfg && sess) await showLock();
     if (cfg && sess) {
       try { await token(); await enter(); return; }
       catch (e) { showAuth(e.auth ? "Vuelve a entrar." : "No se pudo conectar. Comprueba internet."); return; }

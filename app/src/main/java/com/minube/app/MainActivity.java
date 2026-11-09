@@ -7,10 +7,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.database.Cursor;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
+import android.provider.OpenableColumns;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -20,16 +22,19 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 public class MainActivity extends Activity {
@@ -46,6 +51,12 @@ public class MainActivity extends Activity {
     private PdfRenderer pdfRenderer;
     private ParcelFileDescriptor pdfFd;
     private int pdfId = 0;
+
+    // Archivos recibidos desde "Compartir" de otras apps (galería, archivos...).
+    private final Object shareLock = new Object();
+    private final ArrayList<String[]> sharedPending = new ArrayList<String[]>();
+    private final HashMap<String, String> sharedTypes = new HashMap<String, String>();
+    private int shareN = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,6 +90,9 @@ public class MainActivity extends Activity {
                 }
                 if (path.startsWith("/_pdf/")) {
                     return pdfPage(path);
+                }
+                if (path.startsWith("/_shared/")) {
+                    return sharedFile(path);
                 }
                 try {
                     InputStream in = getAssets().open(path.substring(1));
@@ -131,6 +145,130 @@ public class MainActivity extends Activity {
         });
 
         web.loadUrl("https://" + HOST + "/index.html");
+        handleShare(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleShare(intent);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (web != null) {
+            web.evaluateJavascript("window.__resume && window.__resume()", null);
+        }
+    }
+
+    // ---------- Recibir archivos desde Compartir ----------
+
+    @SuppressWarnings("deprecation")
+    private void handleShare(Intent intent) {
+        if (intent == null) {
+            return;
+        }
+        String action = intent.getAction();
+        final ArrayList<Uri> uris = new ArrayList<Uri>();
+        try {
+            if (Intent.ACTION_SEND.equals(action)) {
+                Uri u = (Uri) intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (u != null) {
+                    uris.add(u);
+                }
+            } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
+                ArrayList<Uri> l = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                if (l != null) {
+                    uris.addAll(l);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (uris.isEmpty()) {
+            return;
+        }
+        // Ya está tomado: así no se repite al girar o volver a abrir la app.
+        setIntent(new Intent(Intent.ACTION_MAIN));
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                File dir = new File(getCacheDir(), "compartido");
+                dir.mkdirs();
+                for (Uri uri : uris) {
+                    try {
+                        String name = "archivo";
+                        String type = getContentResolver().getType(uri);
+                        Cursor c = null;
+                        try {
+                            c = getContentResolver().query(uri, null, null, null, null);
+                            if (c != null && c.moveToFirst()) {
+                                int ix = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                                if (ix >= 0) {
+                                    String n = c.getString(ix);
+                                    if (n != null && n.length() > 0) {
+                                        name = n;
+                                    }
+                                }
+                            }
+                        } catch (Exception ignored) {
+                        } finally {
+                            if (c != null) {
+                                c.close();
+                            }
+                        }
+                        String id;
+                        synchronized (shareLock) {
+                            shareN++;
+                            id = "s" + shareN;
+                        }
+                        InputStream in = getContentResolver().openInputStream(uri);
+                        if (in == null) {
+                            continue;
+                        }
+                        FileOutputStream out = new FileOutputStream(new File(dir, id));
+                        byte[] buf = new byte[16384];
+                        int n;
+                        while ((n = in.read(buf)) != -1) {
+                            out.write(buf, 0, n);
+                        }
+                        out.close();
+                        in.close();
+                        synchronized (shareLock) {
+                            sharedTypes.put(id, type == null ? "application/octet-stream" : type);
+                            sharedPending.add(new String[]{id, name, type == null ? "" : type});
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        web.evaluateJavascript("window.__shared && window.__shared()", null);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private WebResourceResponse sharedFile(String path) {
+        try {
+            String id = path.substring("/_shared/".length());
+            String type;
+            synchronized (shareLock) {
+                type = sharedTypes.get(id);
+            }
+            if (type == null || !id.matches("s[0-9]+")) {
+                return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found",
+                        new HashMap<String, String>(), new ByteArrayInputStream(new byte[0]));
+            }
+            File f = new File(new File(getCacheDir(), "compartido"), id);
+            return new WebResourceResponse(type, null, new FileInputStream(f));
+        } catch (Exception e) {
+            return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found",
+                    new HashMap<String, String>(), new ByteArrayInputStream(new byte[0]));
+        }
     }
 
     private String mimeOf(String path) {
@@ -313,6 +451,50 @@ public class MainActivity extends Activity {
                     }
                 }
             }).start();
+        }
+
+        // Devuelve (y vacía) la lista de archivos compartidos que ya están listos.
+        @JavascriptInterface
+        public String takeShared() {
+            JSONArray arr = new JSONArray();
+            synchronized (shareLock) {
+                try {
+                    for (String[] it : sharedPending) {
+                        JSONObject o = new JSONObject();
+                        o.put("id", it[0]);
+                        o.put("name", it[1]);
+                        o.put("type", it[2]);
+                        arr.put(o);
+                    }
+                } catch (Exception ignored) {
+                }
+                sharedPending.clear();
+            }
+            return arr.toString();
+        }
+
+        // Borra de la memoria temporal los archivos compartidos que ya no hacen falta.
+        @JavascriptInterface
+        public void sharedClear() {
+            synchronized (shareLock) {
+                File dir = new File(getCacheDir(), "compartido");
+                File[] fs = dir.listFiles();
+                if (fs == null) {
+                    return;
+                }
+                for (File f : fs) {
+                    boolean pending = false;
+                    for (String[] it : sharedPending) {
+                        if (it[0].equals(f.getName())) {
+                            pending = true;
+                        }
+                    }
+                    if (!pending) {
+                        f.delete();
+                        sharedTypes.remove(f.getName());
+                    }
+                }
+            }
         }
 
         @JavascriptInterface
