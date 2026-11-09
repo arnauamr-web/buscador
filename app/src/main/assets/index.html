@@ -50,6 +50,12 @@ h1 { font-family: var(--font-display); font-size: 28px; line-height: 1.1; margin
 .sec-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 22px 0 10px; }
 .sec-h h2 { font-family: var(--font-display); font-size: 19px; margin: 0; letter-spacing: -0.01em; overflow-wrap: anywhere; min-width: 0; }
 .sec-h .lnk { background: none; border: 0; color: var(--accent); font-weight: 600; padding: 4px 0; flex: none; }
+#vw-t-btn { background: none; border: 0; padding: 0; text-align: left; display: block; max-width: 100%; }
+.optlist { display: flex; flex-direction: column; gap: 6px; }
+.optlist button { text-align: left; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); display: flex; justify-content: space-between; align-items: center; }
+.optlist button[aria-pressed="true"] { border-color: var(--accent); }
+.infol { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; color: var(--ink-2); }
+.infol b { color: var(--ink); font-weight: 500; overflow-wrap: anywhere; }
 .note { color: var(--ink-2); font-size: 13px; margin: -4px 0 10px; }
 
 .folds { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 6px; scroll-snap-type: x proximity; }
@@ -111,10 +117,11 @@ h1 { font-family: var(--font-display); font-size: 28px; line-height: 1.1; margin
 .selbar { z-index: 12; }
 .nav-in, .selbar-in { max-width: 960px; margin: 0 auto; display: grid; gap: 6px; }
 .nav-in { grid-template-columns: repeat(3, 1fr); }
-.selbar-in { grid-template-columns: auto repeat(3, 1fr) auto; align-items: center; }
+.selbar-in { grid-template-columns: auto repeat(4, 1fr) auto; align-items: center; }
 .nav button, .selbar button { background: none; border: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; font-size: 12px; color: var(--ink-2); border-radius: 12px; }
 .selbar button { color: var(--ink); }
-.selbar .cnt { font-family: var(--font-mono); font-size: 13px; padding: 0 8px; }
+.selbar .cnt { font-family: var(--font-mono); font-size: 15px; font-weight: 500; min-width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.hlinks { display: flex; gap: 14px; flex: none; }
 .nav button[aria-current="true"] { color: var(--accent); font-weight: 600; }
 .fab { position: fixed; z-index: 11; right: max(18px, env(safe-area-inset-right, 0px)); bottom: calc(78px + env(safe-area-inset-bottom, 0px)); width: 60px; height: 60px; border-radius: 50%; border: 0; display: inline-flex; align-items: center; justify-content: center; color: #fff;
   background: linear-gradient(145deg, var(--accent), var(--accent-2)); box-shadow: 0 8px 24px rgba(77, 124, 255, 0.45); }
@@ -257,7 +264,7 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
 <div class="full" id="vw" hidden role="dialog" aria-modal="true" aria-label="Visor">
   <div class="f-top">
     <button class="iconbtn" id="vw-x" type="button" aria-label="Cerrar"></button>
-    <div class="ttl"><b id="vw-t"></b><small id="vw-c"></small></div>
+    <div class="ttl"><button type="button" id="vw-t-btn" aria-label="Más opciones del archivo"><b id="vw-t"></b></button><small id="vw-c"></small></div>
   </div>
   <div class="stage" id="vw-stage"></div>
   <div class="f-bot">
@@ -267,6 +274,7 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
       <button type="button" id="vw-move"></button>
       <button type="button" id="vw-share"></button>
       <button type="button" class="del" id="vw-del"></button>
+      <button type="button" id="vw-more"></button>
     </div>
   </div>
 </div>
@@ -285,7 +293,7 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
 (function () {
   "use strict";
   var APP = !!window.Android;
-  var VERSION = "1.0";
+  var VERSION = "1.1";
   var BUCKET = "nube";
 
   var SQL = [
@@ -356,6 +364,8 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
     doc: '<path d="M7 3h7l5 5v13H7zM14 3v5h5"/>',
     restore: '<path d="M4 12a8 8 0 1 0 3-6.2M4 4v5h5"/>',
     check: '<path d="M5 12l5 5 9-10"/>',
+    dots: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1"/>',
     move: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M10 13h6M13 10l3 3-3 3"/>'
   };
   function ico(n) { var s = document.createElement("span"); s.className = "ico"; s.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + I[n] + "</svg>"; return s; }
@@ -478,7 +488,7 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
   /* ---------- Datos ---------- */
   var D = { folders: [], vaults: [], files: [] };
   var lastSig = null, authed = false, loadError = "";
-  var S = { tab: "files", path: [], tag: null, q: "", sel: null, edit: false, sc: null };
+  var S = { tab: "files", path: [], tag: null, q: "", sel: null, edit: false, sc: null, sort: load("nube.sort") || "new" };
   var V = null;
 
   async function loadAll() {
@@ -512,7 +522,16 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
     else if (!q && curFolder()) a = a.filter(function (f) { return f.folder_id === curFolder(); });
     if (S.tag) a = a.filter(function (f) { return f.tags.indexOf(S.tag) !== -1; });
     if (q) a = a.filter(function (f) { return f.name.toLowerCase().indexOf(q) !== -1 || f.tags.some(function (t) { return t.indexOf(q) !== -1; }); });
-    return a.sort(function (x, y) { return x.created_at < y.created_at ? 1 : -1; });
+    return sortFiles(a);
+  }
+  function sortFiles(a) {
+    var m = S.sort;
+    return a.sort(function (x, y) {
+      if (m === "old") return x.created_at < y.created_at ? -1 : 1;
+      if (m === "name") return x.name.localeCompare(y.name, "es", { numeric: true, sensitivity: "base" });
+      if (m === "size") return (y.size || 0) - (x.size || 0);
+      return x.created_at < y.created_at ? 1 : -1;
+    });
   }
 
   async function patchFiles(ids, patch) {
@@ -584,10 +603,28 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
     d.onclick = function () { if (!d.classList.contains("armed")) { d.classList.add("armed"); d.textContent = "¿Seguro?"; return; } permDelete([f]).then(renderAll); };
     a.appendChild(r); a.appendChild(d); c.appendChild(a); return c;
   }
-  function secH(title, linkText, fn, armed) {
+  function secH(title, linkText, fn, extra) {
     var h = el("div", "sec-h"); h.appendChild(el("h2", null, title));
-    if (linkText) { var b = el("button", "lnk", linkText); b.type = "button"; b.onclick = function () { fn(b); }; h.appendChild(b); }
+    if (linkText || extra) {
+      var hl = el("div", "hlinks"); h.appendChild(hl);
+      if (extra) { var e2 = el("button", "lnk", extra[0]); e2.type = "button"; e2.onclick = extra[1]; hl.appendChild(e2); }
+      if (linkText) { var b = el("button", "lnk", linkText); b.type = "button"; b.onclick = function () { fn(b); }; hl.appendChild(b); }
+    }
     return h;
+  }
+  var SORTS = [["new", "Más recientes primero"], ["old", "Más antiguos primero"], ["name", "Nombre (A a Z)"], ["size", "Más grandes primero"]];
+  function sortLink() { return ["Ordenar", openSort]; }
+  function openSort() {
+    openSheet(function (b) {
+      b.appendChild(el("h3", null, "Ordenar por"));
+      var l = el("div", "optlist");
+      SORTS.forEach(function (o) {
+        var bt = el("button"); bt.type = "button"; bt.setAttribute("aria-pressed", String(S.sort === o[0])); bt.appendChild(document.createTextNode(o[1]));
+        if (S.sort === o[0]) bt.appendChild(ico("check"));
+        bt.onclick = function () { S.sort = o[0]; save("nube.sort", o[0]); closeSheet(); renderAll(); }; l.appendChild(bt);
+      });
+      b.appendChild(l);
+    });
   }
   function renderCrumb() {
     var c = $("#crumb"); c.textContent = "";
@@ -646,9 +683,9 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
       if (fo0 && S.tag) title += " · #" + S.tag;
       b.appendChild(secH(title, list.length ? (S.sel ? "Cancelar" : "Seleccionar") : (S.tag ? "Ver todo" : ""), function () {
         if (!list.length) { S.tag = null; renderAll(); return; } if (S.sel) endSel(); else beginSel();
-      }));
+      }, list.length > 1 ? sortLink() : null));
     } else if (S.tab === "fav") {
-      b.appendChild(secH("Favoritos", list.length ? (S.sel ? "Cancelar" : "Seleccionar") : "", function () { if (S.sel) endSel(); else beginSel(); }));
+      b.appendChild(secH("Favoritos", list.length ? (S.sel ? "Cancelar" : "Seleccionar") : "", function () { if (S.sel) endSel(); else beginSel(); }, list.length > 1 ? sortLink() : null));
     } else if (S.tab === "trash") {
       var h = secH("Papelera", list.length ? "Vaciar" : "", function (bt) {
         if (!bt.classList.contains("armed")) { bt.classList.add("armed"); bt.textContent = "¿Seguro?"; return; }
@@ -765,12 +802,33 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
   function updateSelbar() {
     var bar = $("#selbar"); bar.hidden = !S.sel; if (!S.sel) return;
     var box = $("#selbar-in"); box.textContent = ""; var n = selIds().length;
-    box.appendChild(el("span", "cnt", n + (n === 1 ? " elegido" : " elegidos")));
+    var cn = el("span", "cnt", String(n)); cn.setAttribute("aria-label", n + " elegidos"); box.appendChild(cn);
     function act(icon, label, fn) { var b = el("button"); b.type = "button"; b.appendChild(ico(icon)); b.appendChild(el("span", null, label)); b.onclick = function () { if (!selIds().length) { toast("Elige algún archivo."); return; } fn(selIds()); }; box.appendChild(b); }
     act("move", "Mover", function (ids) { openMove(ids, endSel); });
     act("star", "Favorito", function (ids) { var all = ids.every(function (id) { return fileById(id).fav; }); patchFiles(ids, { fav: !all }).then(renderAll); endSel(); });
+    act("tag", "Etiquetar", function (ids) { openBulkTag(ids); });
     act("trash", "Papelera", function (ids) { patchFiles(ids, { deleted_at: new Date().toISOString() }).then(renderAll); endSel(); toast("Movido a la papelera"); });
     var x = el("button"); x.type = "button"; x.setAttribute("aria-label", "Cancelar"); x.appendChild(ico("x")); x.onclick = endSel; box.appendChild(x);
+  }
+
+  function openBulkTag(ids) {
+    openSheet(function (b) {
+      b.appendChild(el("h3", null, "Etiquetar " + ids.length + (ids.length === 1 ? " archivo" : " archivos")));
+      var form = el("form", "tagform"), inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 20; inp.placeholder = "Etiqueta"; inp.autocomplete = "off"; inp.autocapitalize = "off"; inp.setAttribute("aria-label", "Etiqueta para todos");
+      var ad = el("button", "btn primary", "Añadir a todos"); ad.type = "submit"; form.appendChild(inp); form.appendChild(ad); b.appendChild(form);
+      var err = el("div", "err"); b.appendChild(err);
+      function apply(t) {
+        t = cleanTag(t); if (!t) return;
+        var ch = ids.map(fileById).filter(function (f) { return f && f.tags.indexOf(t) === -1 && f.tags.length < 10; });
+        Promise.all(ch.map(function (f) { f.tags = f.tags.concat([t]); return rest("PATCH", "files?id=eq." + f.id, { tags: f.tags }, { Prefer: "return=minimal" }); })).catch(function () { toast("No se pudo guardar alguna etiqueta."); });
+        lastSig = null; closeSheet(); endSel(); toast("Etiqueta #" + t + " añadida a " + ch.length + (ch.length === 1 ? " archivo" : " archivos"));
+      }
+      form.onsubmit = function (e) { e.preventDefault(); if (!cleanTag(inp.value)) { err.textContent = "Escribe una etiqueta."; return; } apply(inp.value); };
+      var cnt = {}; live().forEach(function (f) { f.tags.forEach(function (t) { cnt[t] = (cnt[t] || 0) + 1; }); });
+      var keys = Object.keys(cnt).sort(function (a, z) { return cnt[z] - cnt[a]; }).slice(0, 8);
+      if (keys.length) { var r = el("div", "tagrow"); keys.forEach(function (t) { var c = el("button", "chip", "#" + t); c.type = "button"; c.onclick = function () { apply(t); }; r.appendChild(c); }); b.appendChild(r); }
+      setTimeout(function () { inp.focus(); }, 50);
+    });
   }
 
   /* ---------- Visor ---------- */
@@ -803,7 +861,7 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
     var inVault = !!V.vault;
     var fav = $("#vw-fav"); fav.hidden = inVault; fav.setAttribute("aria-pressed", String(!!f.fav)); put(fav, "star", "Favorito");
     var mv = $("#vw-move"); mv.hidden = inVault; put(mv, "move", "Mover");
-    put($("#vw-share"), "link", "Enlace");
+    put($("#vw-share"), "link", "Enlace"); put($("#vw-more"), "dots", "Más");
     var del = $("#vw-del"); del.classList.remove("armed"); put(del, "trash", inVault ? "Borrar" : "Papelera");
     renderVTags(f);
     var url; try { url = await urlFor(f.path); } catch (e) { url = null; }
@@ -824,6 +882,33 @@ textarea.sql { width: 100%; height: 150px; font-family: var(--font-mono); font-s
   }
   function stepV(d) { V.i = (V.i + d + V.ids.length) % V.ids.length; showViewer(); }
   $("#vw-x").appendChild(ico("x")); $("#vw-x").onclick = closeViewer;
+  var KIND_NAMES = { img: "Foto", vid: "Vídeo", pdf: "PDF", txt: "Texto", other: "Archivo" };
+  function openMore() {
+    var f = fileById(V.ids[V.i]); if (!f) return;
+    openSheet(function (b) {
+      b.appendChild(el("h3", null, "Opciones del archivo"));
+      var fl = el("label", "field", "Nombre"), ni = document.createElement("input"); ni.type = "text"; ni.maxLength = 120; ni.value = f.name; ni.autocomplete = "off"; fl.appendChild(ni); b.appendChild(fl);
+      var err = el("div", "err"); b.appendChild(err);
+      var sv = el("button", "btn primary", "Guardar nombre"); sv.type = "button";
+      sv.onclick = async function () {
+        var n = ni.value.trim(); if (!n) { err.textContent = "El nombre no puede estar vacío."; return; }
+        if (n !== f.name) { await patchFiles([f.id], { name: n }); $("#vw-t").textContent = n; renderAll(); toast("Nombre cambiado"); }
+        closeSheet();
+      };
+      b.appendChild(sv);
+      var dl = el("button", "btn", "Descargar al dispositivo"); dl.type = "button";
+      dl.onclick = async function () {
+        try { var u = await urlFor(f.path); if (!u) throw new Error("sin enlace"); openExternal(u + (u.indexOf("?") === -1 ? "?" : "&") + "download=" + encodeURIComponent(f.name)); closeSheet(); }
+        catch (e) { err.textContent = "No se pudo preparar la descarga."; }
+      };
+      b.appendChild(dl);
+      var info = el("dl", "infol");
+      [["Tipo", KIND_NAMES[f.kind] || "Archivo"], ["Tamaño", fmtSize(f.size)], ["Subido", new Date(f.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })]].forEach(function (r) { info.appendChild(el("span", null, r[0])); info.appendChild(el("b", null, r[1])); });
+      b.appendChild(info);
+      var x = el("button", "btn", "Cerrar"); x.type = "button"; x.onclick = closeSheet; b.appendChild(x);
+    });
+  }
+  $("#vw-more").onclick = openMore; $("#vw-t-btn").onclick = openMore;
   (function () {
     var st = $("#vw-stage"), x0 = null;
     st.addEventListener("pointerdown", function (e) { x0 = e.clientX; });
